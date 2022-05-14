@@ -2193,6 +2193,11 @@ replaceBrace:
 #define sem_destroy_(sem, ...)\
 	ERR_NEG1(sem_destroy(sem), ##__VA_ARGS__)
 
+#define pthread_setcancelstate_(state, oldstate, ...)\
+	ERR_NEG1(pthread_setcancelstate(state, oldstate), ##__VA_ARGS__)
+#define pthread_setcanceltype_(type, oldtype, ...)\
+	ERR_NEG1(pthread_setcanceltype(type, oldtype), ##__VA_ARGS__)
+
 // extra:
 #define open_(path, oflag, ...)\
 	CHECK_RETRY(open(path, oflag, ##__VA_ARGS__))

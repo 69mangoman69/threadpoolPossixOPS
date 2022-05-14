@@ -1,19 +1,16 @@
-// testing fork and pr
 #define ERR_MULTIPROCESS 0
 #define USAGE_STRING "serverAddress clientAddress fileName"
 #include "katwikOpsys.h"
 
-#define SERVER_ADDRESS "127.0.4.20"
-#define CLIENT_ADDRESS "127.0.0.69"
-
 #define DESIRED_PORT 3500
-#define BUFSIZE 50
 
 #define MAX_BUF 500
 #define LEN 40
+
+// TODO: remove this lol
 typedef struct clientRequest_ {
-    char clientAddr[LEN];
-    char fileName[LEN];
+	char clientAddr[LEN];
+	char fileName[LEN];
 	int sockAddr;
 } clientRequest;
 
@@ -38,28 +35,25 @@ int main(int argc, char** argv) {
 	setsockopt_(clientSock, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(int));
 
 	// bind our socket to our address
-	bind_(clientSock, (struct sockaddr *) &clientAddr, sizeof(clientAddr));
+	bind_(clientSock, (struct sockaddr*) &clientAddr, sizeof(clientAddr));
 
 	// conect to the server through our socket
-	ERR_NEG1(connect(clientSock, (struct sockaddr *) &serverAddr, sizeof(serverAddr)));
+	ERR_NEG1(connect(clientSock, (struct sockaddr*) &serverAddr, sizeof(serverAddr)));
 
-	// send something to the server
-	// char sendBuf[BUFSIZE] = {0};
-	// sprintf(sendBuf, "Hello from client!");
-	// send_(clientSock, sendBuf, strlen(sendBuf), 0);
-
-	//preparing message &send
-	char request[LEN*2] = {0};
+	// preparing message &send
+	char request[LEN * 2] = {0};
 	snprintf(request, LEN - 1, "%s", argv[2]);
 	snprintf(request + LEN, LEN - 1, "%s", argv[3]);
 	send_(clientSock, &request, sizeof(request), 0);
 
 	// receive something from the server
-	char recvBuf[MAX_BUF+1] = {0};
+	char recvBuf[MAX_BUF + 1] = {0};
 	recv_(clientSock, recvBuf, MAX_BUF, 0);
 	printf("Received:\n%s\n", recvBuf);
 
 	// cleanup and exit
 	close_(clientSock);
+
 	return EXIT_SUCCESS;
 }
+
