@@ -1,30 +1,29 @@
 #define ERR_MULTIPROCESS 0
 #define USAGE_STRING "serverAddress"
 
-typedef struct clientRequest_ clientRequest;
-#define LIST_TYPE clientRequest*
+typedef struct ClientRequest_ ClientRequest;
+#define LIST_TYPE ClientRequest*
 #include "katwikOpsys.h"
 
-#define DESIRED_PORT 3500
+#define PORT 3500
 #define BACKLOG 1
 
 #define MAX_BUF 500
-//#define TEST_FILENAME "testfile.txt"
 #define LEN 40
 #define THREAD_COUNT 2
 
-typedef struct threadArgs_t_ {
+typedef struct ThreadArgs_ {
 	int threadNum;
 	sem_t* sleepSem;
 	sem_t* clientQueueAccessSem;
 	MyList* clientQueue;
-} threadArgs_t;
+} ThreadArgs;
 
-typedef struct clientRequest_ {
+typedef struct ClientRequest_ {
 	char clientAddr[LEN];
 	char fileName[LEN];
 	int sockAddr;
-} clientRequest;
+} ClientRequest;
 
 volatile sig_atomic_t sigint_received = 0;
 void sigint_handler(int sig) {
@@ -36,12 +35,12 @@ void* threadFunc(void* voidArgs) {
 	pthread_setcanceltype_(PTHREAD_CANCEL_DEFERRED, NULL);
 
 	while (!sigint_received) {
-		threadArgs_t* args = (threadArgs_t*) voidArgs;
+		ThreadArgs* args = (ThreadArgs*) voidArgs;
 		sem_wait_(args->sleepSem);
 		sem_wait_(args->clientQueueAccessSem);
 
 		// bro my terminal ain't wide enough to put this on one line lmfao
-		clientRequest* request = popFirstVal(args->clientQueue);
+		ClientRequest* request = popFirstVal(args->clientQueue);
 		sem_post_(args->clientQueueAccessSem);
 
 		printf_("Thread %d recieved request: \"%s\" from: %s\n",
@@ -67,7 +66,7 @@ int main(int argc, char** argv) {
 	sethandler(sigint_handler, SIGINT);
 
 	// setup the address we'll bind to
-	struct sockaddr_in serverAddr = make_sockaddr_in(AF_INET, htons(DESIRED_PORT),
+	struct sockaddr_in serverAddr = make_sockaddr_in(AF_INET, htons(PORT),
 			inet_addr_(argv[1])
 			);
 
@@ -91,10 +90,10 @@ int main(int argc, char** argv) {
 
 	pthread_t* threads = malloc_(THREAD_COUNT * sizeof(pthread_t));
 	pthread_attr_t threadAttr = pthread_attr_make();
-	threadArgs_t* threadArgs = malloc_(THREAD_COUNT * sizeof(threadArgs_t));
+	ThreadArgs* threadArgs = malloc_(THREAD_COUNT * sizeof(ThreadArgs));
 
 	for (int i = 0; i < THREAD_COUNT; ++i) {
-		threadArgs_t args = {
+		ThreadArgs args = {
 			.threadNum = i + 1,
 			.sleepSem = &sleepSem,
 			.clientQueue = clientQueue,
@@ -118,7 +117,7 @@ int main(int argc, char** argv) {
 		printf("Accepted %s\n", inet_ntoa(clientAddr.sin_addr));
 
 		char rcvBuf[LEN * 2];
-		clientRequest* recvRequest = (clientRequest*) calloc(1, sizeof(clientRequest));
+		ClientRequest* recvRequest = (ClientRequest*) calloc(1, sizeof(ClientRequest));
 		recv_(clientSock, rcvBuf, 2 * LEN, 0);
 		recvRequest->sockAddr = clientSock;
 		strncpy(recvRequest->clientAddr, rcvBuf, LEN - 1);
@@ -130,7 +129,7 @@ int main(int argc, char** argv) {
 		sem_post_(&sleepSem);
 	}
 
-	// wait for threads to finish
+	// cancel threads and wait for them to finish
 	for (int i = 0; i < THREAD_COUNT; ++i) {
 		pthread_cancel_(threads[i]);
 		pthread_join_(threads[i], NULL);
@@ -138,7 +137,15 @@ int main(int argc, char** argv) {
 
 	// cleanup and exit
 	printf_("\n"); // slightly tidier exit
+
+	// free any remaining requests in queue
+	// fixes Issue #3 lul
+	for (ClientRequest* request; myListLength(clientQueue);) {
+		request = popFirstVal(clientQueue);
+		FREE(request);
+	}
 	deleteMyList(clientQueue); 
+
 	sem_destroy_(&sleepSem);
 	close_(serverSock);
 

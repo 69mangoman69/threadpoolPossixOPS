@@ -2,28 +2,21 @@
 #define USAGE_STRING "serverAddress clientAddress fileName"
 #include "katwikOpsys.h"
 
-#define DESIRED_PORT 3500
+#define PORT 3500
 
 #define MAX_BUF 500
 #define LEN 40
-
-// TODO: remove this lol
-typedef struct clientRequest_ {
-	char clientAddr[LEN];
-	char fileName[LEN];
-	int sockAddr;
-} clientRequest;
 
 int main(int argc, char** argv) {
 	USAGE(argc == 4);
 
 	// setup the address we'll connect to
-	struct sockaddr_in serverAddr = make_sockaddr_in( AF_INET, htons(DESIRED_PORT),
+	struct sockaddr_in serverAddr = make_sockaddr_in( AF_INET, htons(PORT),
 			inet_addr_(argv[1])
 			);
 
 	// setup the address we'll connect to
-	struct sockaddr_in clientAddr = make_sockaddr_in( AF_INET, htons(DESIRED_PORT),
+	struct sockaddr_in clientAddr = make_sockaddr_in( AF_INET, htons(PORT),
 			inet_addr_(argv[2])
 			);
 
