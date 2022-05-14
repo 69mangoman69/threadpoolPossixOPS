@@ -6,6 +6,7 @@
 #ifndef KATWIK_HEADER
 #define KATWIK_HEADER
 
+// lol
 #define HEADER_OKAY
 
 #ifndef __GNUC__
