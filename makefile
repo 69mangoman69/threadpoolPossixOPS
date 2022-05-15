@@ -5,7 +5,7 @@ FILENAME=threadsPool
 # 0 to see a few more useless warnings,
 # -1 if you you're perfectionist,
 # -2 if you want a bossfight with the compiler (try to compile even a hello world with this mode lmao)
-FEELINGLAZY:=0
+FEELINGLAZY:=-1
 
 # 1 to clean whenever you make, 0 to not
 # is an automatic make clean :) kinda nice
@@ -30,7 +30,7 @@ CLIENTPOSTFIX=Client
 # you can change that tho
 #
 # probably only useful on lab6 tho
-IPCMSGQS=CHAT_*
+IPCMSGQS=
 IPCMSGQPATH=/dev/mqueue
 
 # approximately:
@@ -137,13 +137,12 @@ endif
 
 CC=gcc
 CFLAGS=$(PREPROCESS) $(ASSEMBLE) -pthread -Wall -Wextra -ftrack-macro-expansion=0 -fno-omit-frame-pointer -g3 -O$(OPTLVL) $(SANITIZEFLAGS)
-LDFLAGS=-lpthread -lrt #-lm
-DOXYPATH=./doxy
+LDFLAGS=-lpthread -lrt
 
 COMPILEMSG="$(BLUE)===\t$(GREEN)$<$(BLUE)\t->\t$(GREEN)$@$(OUTPUTEXTENSION)\t$(BLUE)===$(RESET)\n"
 COMPILE=$(CC) $(CFLAGS) $(LAZYFLAGS) $< -o $@$(OUTPUTEXTENSION) $(LDFLAGS)
 
-.PHONY: all docs dualFile clean clear preprocess assemble cow tmp
+.PHONY: all docs dualFile clean clear preprocess assemble
 
 all: $(SHOULDCLEAN) $(SHOULDCLEAR)
 ifeq ($(DUALFILE), 1)
@@ -171,32 +170,12 @@ else
 clean: OUTPUTS=$(FILENAME)$(SERVERPOSTIX)$(OUTPUTEXTENSION) $(FILENAME)$(CLIENTPOSTFIX)$(OUTPUTEXTENSION)
 endif
 clean:
+ifneq ($(IPCMSGQS),)
 	@printf "$(BLUE)Trying to remove $(GREEN)$(IPCMSGQS)$(RESET) (message queues) from $(GREEN)$(IPCMSGQPATH)$(RESET)\n"
 	-@cd $(IPCMSGQPATH); rm -v -f $(IPCMSGQS)
+endif
 	@printf "$(BLUE)Trying to remove $(GREEN)$(OUTPUTS)$(GREEN)$(RESET)\n"
 	-@rm -v -f $(OUTPUTS)
-
-docs: USERNAME=katwikirizee
-docs: TOUPLOAD=makefile $(HEADERNAME).h
-ifeq ($(DUALFILE), 0)
-docs: TOUPLOAD+=$(FILENAME).c
-else
-docs: TOUPLOAD+=$(FILENAME)$(SERVERPOSTIX).c $(FILENAME)$(CLIENTPOSTFIX).c
-endif
-docs: $(SHOULDCLEAR)
-	@printf "$(BLUE)Makin $(GREEN)$(DOXYPATH)$(RESET)\n"
-	@cp $(HEADERNAME).h $(DOXYPATH)
-	@cd $(DOXYPATH); doxygen
-###
-	@printf "\n$(BLUE)Copying $(GREEN)$(TOUPLOAD) $(BLUE)to $(GREEN)$(DOXYPATH)/html/downloads$(RESET)\n"
-	@rm -rf $(DOXYPATH)/html/downloads/*
-	-@cp $(TOUPLOAD) $(DOXYPATH)/html/downloads
-###
-	@printf "\n$(BLUE)Uploading $(GREEN)$(DOXYPATH)/html $(BLUE)to $(GREEN)./public_html/$(RESET)\n"
-	-@scp -r $(DOXYPATH)/html $(USERNAME)@ssh.mini.pw.edu.pl:./public_html/
-###
-	@printf "\n$(BLUE)Uploading $(GREEN)$(TOUPLOAD) $(BLUE)to $(GREEN)./$(RESET)\n"
-	-@scp -r $(TOUPLOAD) $(USERNAME)@ssh.mini.pw.edu.pl:./
 
 preprocess:
 	@$(MAKE) -B -s PREPROCESS=-E OUTPUTEXTENSION=$(PREPROCESSEXTENSION) $(filter-out $@, $(MAKECMDGOALS))
@@ -206,6 +185,3 @@ assemble:
 
 clear:
 	@clear
-
-cow:
-	-@cowsay lol

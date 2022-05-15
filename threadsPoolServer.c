@@ -8,20 +8,20 @@ typedef struct ClientRequest_ ClientRequest;
 #define PORT 3500
 #define BACKLOG 1
 
-#define MAX_BUF 500
-#define LEN 40
+#define MAX_FILE_LEN 500
+#define MAX_REQUEST_LEN 40
 #define THREAD_COUNT 2
 
 typedef struct ThreadArgs_ {
 	int threadNum;
+	MyList* clientQueue;
 	sem_t* newRequestSem;
 	pthread_mutex_t* clientQueueMutex;
-	MyList* clientQueue;
 } ThreadArgs;
 
 struct ClientRequest_ {
-	char clientAddr[LEN];
-	char fileName[LEN];
+	struct sockaddr_in* clientAddr;
+	char fileName[MAX_REQUEST_LEN + 1];
 	int clientSocket;
 };
 
@@ -31,6 +31,7 @@ void sigint_handler(int sig) {
 	sigint_received = 1;
 }
 
+#define BAD_FILE_RESPONSE "BRUHH THAT AIN'T NO FIIILE"
 void* threadFunc(void* voidArgs) {
 	pthread_setcanceltype_(PTHREAD_CANCEL_DEFERRED, NULL);
 	ThreadArgs* args = (ThreadArgs*) voidArgs;
@@ -43,20 +44,35 @@ void* threadFunc(void* voidArgs) {
 		pthread_mutex_lock_(args->clientQueueMutex);
 		ClientRequest* clientRequest = popFirstVal(args->clientQueue);
 		pthread_mutex_unlock_(args->clientQueueMutex);
-		printf_("Thread %d handling request: \"%s\" from %s\n",
-				args->threadNum, clientRequest->fileName, clientRequest->clientAddr);
 
-		// open the requested file
-		int filedes = open_(clientRequest->fileName, O_RDONLY);
-		// TODO: handle ENOENT here lol
+		// print request details
+		printf_("Thread %d handling request: \"%s\" from %s\n",
+				args->threadNum,
+				clientRequest->fileName,
+				inet_ntoa((clientRequest->clientAddr)->sin_addr));
+
+		// open the requested file,
+		// retry it if it gets interrupted,
+		// ignore ENOENT so that we can handle it ourselves
+		int filedes = CHECK_RETRY_( open(clientRequest->fileName, O_RDONLY) , ENOENT );
+		if (ENOENT == errno) {
+			send_(clientRequest->clientSocket,
+					BAD_FILE_RESPONSE, strlen(BAD_FILE_RESPONSE), 0);
+			close_(clientRequest->clientSocket);
+
+			FREE(clientRequest->clientAddr);
+			FREE(clientRequest);
+			continue;
+		}
 
 		// read the file and send it
-		char buf[MAX_BUF + 1] = {0};
-		read_(filedes, buf, MAX_BUF);
+		char buf[MAX_FILE_LEN + 1] = {0};
+		read_(filedes, buf, MAX_FILE_LEN);
 		send_(clientRequest->clientSocket, buf, strlen(buf), 0);
 
 		// cleanup
 		close_(clientRequest->clientSocket);
+		FREE(clientRequest->clientAddr);
 		FREE(clientRequest);
 	}
 
@@ -109,33 +125,37 @@ int main(int argc, char** argv) {
 	// queue requests until we're interrupted
 	while (!sigint_received) {
 		// accept new client,
-		// if we get interrupted we assume it's by SIGINT and we stop the loop
-		struct sockaddr_in clientAddr = {0};
 		socklen_t clientAddrLen = sizeof(struct sockaddr_in);
-		int clientSocket
-			= accept(serverSocket, (struct sockaddr*) &clientAddr, &clientAddrLen);
-		if (errno == EINTR) {
+		struct sockaddr_in* clientAddr = malloc(clientAddrLen);
+		int clientSocket = ERR_NEG1_(
+				accept(serverSocket, (struct sockaddr*) clientAddr, &clientAddrLen),
+				EINTR);
+
+		// if we get interrupted we assume it's by SIGINT and we stop the loop
+		if (EINTR == errno) {
+			// we need some extra cleanup now,
+			// since we're doing the first part slightly different
+			FREE(clientAddr);
 			break;
 		}
-		printf_("Accepted %s\n", inet_ntoa(clientAddr.sin_addr));
 
-		// setup new struct for this client's request
+		// struct for new client's request
 		ClientRequest* newClientRequest = (ClientRequest*) calloc(1, sizeof(ClientRequest));
 		newClientRequest->clientSocket = clientSocket;
+		newClientRequest->clientAddr = clientAddr;
 
-		// receive client's request message which has their redundant client adress????????
-		char requestString[LEN * 2] = {0};
-		recv_(clientSocket, requestString, 2 * LEN, 0);
+		// receive client's request and put it in the struct
+		recv_(clientSocket, newClientRequest->fileName, MAX_REQUEST_LEN, 0);
 
-		// TODO: remove redundant address, pass sockaddr* to thread in request struct
-		strncpy(newClientRequest->clientAddr, requestString, LEN - 1);
-		strncpy(newClientRequest->fileName, requestString + LEN, LEN - 1);
-		printf_("Request: \"%s\"\n", newClientRequest->fileName);
+		// print request details
+		printf_("Main thread accepted request: \"%s\" from %s\n",
+				newClientRequest->fileName, inet_ntoa(clientAddr->sin_addr));
 
 		// insert the request and signal the threads
 		pthread_mutex_lock_(&clientQueueMutex);
 		insertValLast(clientQueue, newClientRequest);
 		pthread_mutex_unlock_(&clientQueueMutex);
+
 		sem_post_(&newRequestSem);
 	}
 
@@ -149,7 +169,6 @@ int main(int argc, char** argv) {
 	printf_("\n"); // slightly tidier exit
 
 	// free any remaining requests in queue
-	// fixes Issue #3 lul
 	for (ClientRequest* clientRequest; myListLength(clientQueue);) {
 		clientRequest = popFirstVal(clientQueue);
 		FREE(clientRequest);
@@ -165,4 +184,3 @@ int main(int argc, char** argv) {
 
 	return EXIT_SUCCESS;
 }
-

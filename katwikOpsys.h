@@ -1920,6 +1920,7 @@ replaceBrace:
 
 // NB: castType is ignored here, because I'm too lazy lol
 // not the best solution but whatever
+// TODO: FIX THIS LOL
 #define ERR_IF(expr, condition, castType, ...) do {\
 	errno = 0;\
 	castType exprVal = (castType) (expr);\
@@ -2048,11 +2049,19 @@ replaceBrace:
 #define MIGHT_FAIL_SSIZE_T(expr, ...) MIGHT_FAIL_(expr, ERR_SSIZE_T, ##__VA_ARGS__)
 #define MIGHT_FAIL_IN_ADDR_T(expr, ...) MIGHT_FAIL_(expr, ERR_IN_ADDR_T, ##__VA_ARGS__)
 
-#define CHECK_RETRY_(expr, err, errType, ...) err( myRetry(expr, errType) , ##__VA_ARGS__)
-#define CHECK_RETRY(expr, ...) CHECK_RETRY_(expr, ERR_NEG1, int, ##__VA_ARGS__)
-#define CHECK_RETRY_MQ(expr, ...) CHECK_RETRY_(expr, ERR_MQ, mqd_t, ##__VA_ARGS__)
-#define CHECK_RETRY_SSIZE_T(expr, ...) CHECK_RETRY_(expr, ERR_SSIZE_T, ssize_t, ##__VA_ARGS__)
-#define CHECK_RETRY_EOF(expr, ...) CHECK_RETRY_(expr, ERR_EOF, int, ##__VA_ARGS__)
+// UGHHH YUCK GROSSS
+// TODO: make these names better
+#define CHECK_RETRY_BASE(expr, err, errType, ...) err( myRetry(expr, errType) , ##__VA_ARGS__)
+
+#define CHECK_RETRY(expr, ...) CHECK_RETRY_BASE(expr, ERR_NEG1, int, ##__VA_ARGS__)
+#define CHECK_RETRY_MQ(expr, ...) CHECK_RETRY_BASE(expr, ERR_MQ, mqd_t, ##__VA_ARGS__)
+#define CHECK_RETRY_SSIZE_T(expr, ...) CHECK_RETRY_BASE(expr, ERR_SSIZE_T, ssize_t, ##__VA_ARGS__)
+#define CHECK_RETRY_EOF(expr, ...) CHECK_RETRY_BASE(expr, ERR_EOF, int, ##__VA_ARGS__)
+
+#define CHECK_RETRY_(expr, ...) CHECK_RETRY_BASE(expr, ERR_NEG1_, int, ##__VA_ARGS__)
+#define CHECK_RETRY_MQ_(expr, ...) CHECK_RETRY_BASE(expr, ERR_MQ_, mqd_t, ##__VA_ARGS__)
+#define CHECK_RETRY_SSIZE_T_(expr, ...) CHECK_RETRY_BASE(expr, ERR_SSIZE_T_, ssize_t, ##__VA_ARGS__)
+#define CHECK_RETRY_EOF_(expr, ...) CHECK_RETRY_BASE(expr, ERR_EOF_, int, ##__VA_ARGS__)
 // in theory there's more types to check but whoooooooo caaaaares
 
 // error checked and retried (if EINTR) versions of some message queue functions
@@ -2079,7 +2088,6 @@ replaceBrace:
 	CHECK_RETRY_MQ(mq_open(name, oflag, ##__VA_ARGS__))
 
 // error retried and/or checked versions of socket functions:
-// TODO: add more (AKA everything they said we'd need)
 #define recvfrom_(socket, buffer, length, flags, address, address_len, ...)\
 	CHECK_RETRY_SSIZE_T(recvfrom(socket, buffer, length, flags, address, address_len), ##__VA_ARGS__)
 #define sendto_(socket, buffer, length, flags, dest_addr, address_len, ...)\
