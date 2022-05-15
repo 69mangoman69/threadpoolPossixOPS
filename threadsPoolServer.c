@@ -31,6 +31,7 @@ void sigint_handler(int sig) {
 	sigint_received = 1;
 }
 
+#define BAD_FILE_RESPONSE "BRUHH THAT AIN'T NO FIIILE"
 void* threadFunc(void* voidArgs) {
 	pthread_setcanceltype_(PTHREAD_CANCEL_DEFERRED, NULL);
 	ThreadArgs* args = (ThreadArgs*) voidArgs;
@@ -50,9 +51,19 @@ void* threadFunc(void* voidArgs) {
 				clientRequest->fileName,
 				inet_ntoa((clientRequest->clientAddr)->sin_addr));
 
-		// open the requested file
-		int filedes = open_(clientRequest->fileName, O_RDONLY);
-		// TODO: handle ENOENT here lol
+		// open the requested file,
+		// retry it if it gets interrupted,
+		// ignore ENOENT so that we can handle it ourselves
+		int filedes = CHECK_RETRY_( open(clientRequest->fileName, O_RDONLY) , ENOENT );
+		if (ENOENT == errno) {
+			send_(clientRequest->clientSocket,
+					BAD_FILE_RESPONSE, strlen(BAD_FILE_RESPONSE), 0);
+			close_(clientRequest->clientSocket);
+
+			FREE(clientRequest->clientAddr);
+			FREE(clientRequest);
+			continue;
+		}
 
 		// read the file and send it
 		char buf[MAX_FILE_LEN + 1] = {0};
@@ -158,7 +169,6 @@ int main(int argc, char** argv) {
 	printf_("\n"); // slightly tidier exit
 
 	// free any remaining requests in queue
-	// fixes Issue #3 lul
 	for (ClientRequest* clientRequest; myListLength(clientQueue);) {
 		clientRequest = popFirstVal(clientQueue);
 		FREE(clientRequest);
