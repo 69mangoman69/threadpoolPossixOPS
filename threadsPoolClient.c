@@ -4,6 +4,7 @@
 
 #define PORT 3500
 
+// TODO: this naming convention ain't so sexy lol
 #define MAX_BUF 500
 #define LEN 40
 
@@ -33,7 +34,10 @@ int main(int argc, char** argv) {
 	// conect to the server through our socket
 	ERR_NEG1(connect(clientSock, (struct sockaddr*) &serverAddr, sizeof(serverAddr)));
 
-	// preparing message &send
+	// preparing to send message
+	// TODO: kek
+	// the server knows the address as soon as they accept the connection lmao
+	// no need to send it as string
 	char request[LEN * 2] = {0};
 	snprintf(request, LEN - 1, "%s", argv[2]);
 	snprintf(request + LEN, LEN - 1, "%s", argv[3]);
@@ -42,7 +46,7 @@ int main(int argc, char** argv) {
 	// receive something from the server
 	char recvBuf[MAX_BUF + 1] = {0};
 	recv_(clientSock, recvBuf, MAX_BUF, 0);
-	printf("Received:\n%s\n", recvBuf);
+	printf_("Received:\n%s\n", recvBuf);
 
 	// cleanup and exit
 	close_(clientSock);
