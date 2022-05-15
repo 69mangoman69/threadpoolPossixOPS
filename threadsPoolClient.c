@@ -33,7 +33,11 @@ int main(int argc, char** argv) {
 	// conect to the server through our socket
 	ERR_NEG1(connect(clientSock, (struct sockaddr*) &serverAddr, sizeof(serverAddr)));
 
-	// preparing message &send
+	// preparing message send
+	// TODO: IMO this shouldn't work like this
+	// I'd sprintf (and sscanf on the server side)
+	// with "%s %s" as the format and just send that
+	// it's easier to test with netcat that way lol
 	char request[LEN * 2] = {0};
 	snprintf(request, LEN - 1, "%s", argv[2]);
 	snprintf(request + LEN, LEN - 1, "%s", argv[3]);

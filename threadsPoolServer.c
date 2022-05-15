@@ -14,8 +14,12 @@ typedef struct ClientRequest_ ClientRequest;
 
 typedef struct ThreadArgs_ {
 	int threadNum;
-	sem_t* sleepSem;
+	sem_t* newRequestSem;
+
+	// TODO: this shouldn't even be a semaphore lol
+	// might make it a mutex, but might also just put it into the header lol
 	sem_t* clientQueueAccessSem;
+
 	MyList* clientQueue;
 } ThreadArgs;
 
@@ -33,13 +37,12 @@ void sigint_handler(int sig) {
 
 void* threadFunc(void* voidArgs) {
 	pthread_setcanceltype_(PTHREAD_CANCEL_DEFERRED, NULL);
+	ThreadArgs* args = (ThreadArgs*) voidArgs;
 
 	while (!sigint_received) {
-		ThreadArgs* args = (ThreadArgs*) voidArgs;
-		sem_wait_(args->sleepSem);
+		sem_wait_(args->newRequestSem);
 		sem_wait_(args->clientQueueAccessSem);
 
-		// bro my terminal ain't wide enough to put this on one line lmfao
 		ClientRequest* request = popFirstVal(args->clientQueue);
 		sem_post_(args->clientQueueAccessSem);
 
@@ -51,11 +54,7 @@ void* threadFunc(void* voidArgs) {
 		send_(request->sockAddr, buf, strlen(buf), 0);
 
 		close_(request->sockAddr);
-		FREE(request); // it is possible that the main will exit before 
-		// the queue is empty and that way we dont free everything
-		// nvm i was wrong
-		// YOU WERE RIGHT LMFAO
-		// TODO: SMACK YOU WITH GITHUB ISSUE AND THEN FIX IT LOLLLLL
+		FREE(request); // all swell that end swell lol
 	}
 
 	return NULL;
@@ -85,7 +84,7 @@ int main(int argc, char** argv) {
 
 	// Queue setup & Semaphore
 	MyList* clientQueue = newMyList();
-	sem_t sleepSem = sem_make(0);
+	sem_t newRequestSem = sem_make(0);
 	sem_t clientQueueAccessSem = sem_make();
 
 	pthread_t* threads = malloc_(THREAD_COUNT * sizeof(pthread_t));
@@ -95,7 +94,7 @@ int main(int argc, char** argv) {
 	for (int i = 0; i < THREAD_COUNT; ++i) {
 		ThreadArgs args = {
 			.threadNum = i + 1,
-			.sleepSem = &sleepSem,
+			.newRequestSem = &newRequestSem,
 			.clientQueue = clientQueue,
 			.clientQueueAccessSem = &clientQueueAccessSem
 		};
@@ -126,7 +125,7 @@ int main(int argc, char** argv) {
 		sem_wait_(&clientQueueAccessSem);
 		insertValLast(clientQueue, recvRequest);
 		sem_post_(&clientQueueAccessSem);
-		sem_post_(&sleepSem);
+		sem_post_(&newRequestSem);
 	}
 
 	// cancel threads and wait for them to finish
@@ -146,7 +145,7 @@ int main(int argc, char** argv) {
 	}
 	deleteMyList(clientQueue); 
 
-	sem_destroy_(&sleepSem);
+	sem_destroy_(&newRequestSem);
 	close_(serverSock);
 
 	FREE(threadArgs);
