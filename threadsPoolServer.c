@@ -16,18 +16,16 @@ typedef struct ThreadArgs_ {
 	int threadNum;
 	sem_t* newRequestSem;
 
-	// TODO: this shouldn't even be a semaphore lol
-	// might make it a mutex, but might also just put it into the header lol
-	sem_t* clientQueueAccessSem;
+	pthread_mutex_t* clientQueueMutex;
 
 	MyList* clientQueue;
 } ThreadArgs;
 
-typedef struct ClientRequest_ {
+struct ClientRequest_ {
 	char clientAddr[LEN];
 	char fileName[LEN];
-	int sockAddr;
-} ClientRequest;
+	int clientSocket;
+};
 
 volatile sig_atomic_t sigint_received = 0;
 void sigint_handler(int sig) {
@@ -41,19 +39,22 @@ void* threadFunc(void* voidArgs) {
 
 	while (!sigint_received) {
 		sem_wait_(args->newRequestSem);
-		sem_wait_(args->clientQueueAccessSem);
+		pthread_mutex_lock_(args->clientQueueMutex);
 
 		ClientRequest* request = popFirstVal(args->clientQueue);
-		sem_post_(args->clientQueueAccessSem);
+		pthread_mutex_unlock_(args->clientQueueMutex);
 
-		printf_("Thread %d recieved request: \"%s\" from: %s\n",
+		printf_("Thread %d handling request: \"%s\" from %s\n",
 				args->threadNum, request->fileName, request->clientAddr);
-		char buf[MAX_BUF + 1] = {0};
-		int filedes = open_(request->fileName, O_RDONLY);
-		read_(filedes, buf, MAX_BUF);
-		send_(request->sockAddr, buf, strlen(buf), 0);
 
-		close_(request->sockAddr);
+		int filedes = open_(request->fileName, O_RDONLY);
+		// TODO: handle ENOENT here lol
+
+		char buf[MAX_BUF + 1] = {0};
+		read_(filedes, buf, MAX_BUF);
+		send_(request->clientSocket, buf, strlen(buf), 0);
+
+		close_(request->clientSocket);
 		FREE(request); // all swell that end swell lol
 	}
 
@@ -82,10 +83,10 @@ int main(int argc, char** argv) {
 	// listen for up to 1 connection
 	listen_(serverSock, BACKLOG);
 
-	// Queue setup & Semaphore
+	// queue setup
 	MyList* clientQueue = newMyList();
 	sem_t newRequestSem = sem_make(0);
-	sem_t clientQueueAccessSem = sem_make();
+	pthread_mutex_t clientQueueMutex = pthread_mutex_make();
 
 	pthread_t* threads = malloc_(THREAD_COUNT * sizeof(pthread_t));
 	pthread_attr_t threadAttr = pthread_attr_make();
@@ -96,7 +97,7 @@ int main(int argc, char** argv) {
 			.threadNum = i + 1,
 			.newRequestSem = &newRequestSem,
 			.clientQueue = clientQueue,
-			.clientQueueAccessSem = &clientQueueAccessSem
+			.clientQueueMutex = &clientQueueMutex
 		};
 
 		threadArgs[i] = args;
@@ -107,7 +108,7 @@ int main(int argc, char** argv) {
 	while (!sigint_received) {
 		struct sockaddr_in clientAddr = {0};
 		socklen_t clientAddrLen = sizeof(struct sockaddr_in);
-		int clientSock = accept(serverSock, (struct sockaddr*) &clientAddr, &clientAddrLen);
+		int clientSocket = accept(serverSock, (struct sockaddr*) &clientAddr, &clientAddrLen);
 
 		if (errno == EINTR) {
 			break;
@@ -117,14 +118,15 @@ int main(int argc, char** argv) {
 
 		char rcvBuf[LEN * 2];
 		ClientRequest* recvRequest = (ClientRequest*) calloc(1, sizeof(ClientRequest));
-		recv_(clientSock, rcvBuf, 2 * LEN, 0);
-		recvRequest->sockAddr = clientSock;
+		recv_(clientSocket, rcvBuf, 2 * LEN, 0);
+		recvRequest->clientSocket = clientSocket;
 		strncpy(recvRequest->clientAddr, rcvBuf, LEN - 1);
 		strncpy(recvRequest->fileName, rcvBuf + LEN, LEN - 1);
 		printf("Request: \"%s\"\n", recvRequest->fileName);
-		sem_wait_(&clientQueueAccessSem);
+
+		pthread_mutex_lock_(&clientQueueMutex);
 		insertValLast(clientQueue, recvRequest);
-		sem_post_(&clientQueueAccessSem);
+		pthread_mutex_unlock_(&clientQueueMutex);
 		sem_post_(&newRequestSem);
 	}
 
@@ -146,6 +148,7 @@ int main(int argc, char** argv) {
 	deleteMyList(clientQueue); 
 
 	sem_destroy_(&newRequestSem);
+	pthread_mutex_destroy_(&clientQueueMutex);
 	close_(serverSock);
 
 	FREE(threadArgs);
