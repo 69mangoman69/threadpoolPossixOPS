@@ -4,9 +4,8 @@
 
 #define PORT 3500
 
-// TODO: this naming convention ain't so sexy lol
-#define MAX_BUF 500
-#define LEN 40
+#define MAX_FILE_LEN 500
+#define MAX_REQUEST_LEN 40
 
 int main(int argc, char** argv) {
 	USAGE(argc == 4);
@@ -31,26 +30,24 @@ int main(int argc, char** argv) {
 	// bind our socket to our address
 	bind_(clientSock, (struct sockaddr*) &clientAddr, sizeof(clientAddr));
 
-	// conect to the server through our socket
+	// connect to the server through our socket
 	ERR_NEG1(connect(clientSock, (struct sockaddr*) &serverAddr, sizeof(serverAddr)));
 
-	// preparing to send message
-	// TODO: kek
-	// the server knows the address as soon as they accept the connection lmao
-	// no need to send it as string
-	char request[LEN * 2] = {0};
-	snprintf(request, LEN - 1, "%s", argv[2]);
-	snprintf(request + LEN, LEN - 1, "%s", argv[3]);
+	// preparing to send request
+	char request[MAX_REQUEST_LEN] = {0};
+	snprintf_(request, MAX_REQUEST_LEN, "%s", argv[3]);
+	printf_("Requesting %s\n", request);
+
+	// send request
 	send_(clientSock, &request, sizeof(request), 0);
 
-	// receive something from the server
-	char recvBuf[MAX_BUF + 1] = {0};
-	recv_(clientSock, recvBuf, MAX_BUF, 0);
-	printf_("Received:\n%s\n", recvBuf);
+	// receive and print file from the server
+	char fileBuffer[MAX_FILE_LEN + 1] = {0};
+	recv_(clientSock, fileBuffer, MAX_FILE_LEN, 0);
+	printf_("Received:\n%s\n", fileBuffer);
 
 	// cleanup and exit
 	close_(clientSock);
 
 	return EXIT_SUCCESS;
 }
-
