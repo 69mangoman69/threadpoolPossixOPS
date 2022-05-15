@@ -116,8 +116,9 @@ int main(int argc, char** argv) {
 		// accept new client,
 		socklen_t clientAddrLen = sizeof(struct sockaddr_in);
 		struct sockaddr_in* clientAddr = malloc(clientAddrLen);
-		int clientSocket
-			= accept(serverSocket, (struct sockaddr*) clientAddr, &clientAddrLen);
+		int clientSocket = ERR_NEG1_(
+				accept(serverSocket, (struct sockaddr*) clientAddr, &clientAddrLen),
+				EINTR);
 
 		// if we get interrupted we assume it's by SIGINT and we stop the loop
 		if (EINTR == errno) {
